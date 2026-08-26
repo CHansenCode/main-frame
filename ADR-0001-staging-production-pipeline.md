@@ -44,6 +44,14 @@ the same flow using only Vercel's basic (free) Production/Preview split.
     points Production/Preview/Development at the same database).
   - **Development**-scoped `DATABASE_URL` → also the Neon `preview` branch,
     so local development never touches production data.
+
+  Both overrides must be added as **Config** type (`--no-sensitive`), not
+  **Secret** type (`--sensitive`). Vercel cannot return the real value of a
+  Secret-scoped variable through `vercel env pull` (it writes a
+  `[SENSITIVE]` placeholder instead) — CI needs to actually read the
+  value, so Config is the only type that works here. This cost us one
+  broken CI run to discover, since `vercel env add` accepts `--sensitive`
+  without warning that it'll make the value unpullable.
 - Promotion to production is **manual**, via `vercel promote <url>`, which
   points production traffic at an already-built deployment **without
   rebuilding it**. The code that goes live in production is exactly the
