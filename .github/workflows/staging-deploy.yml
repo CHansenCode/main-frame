@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm ci
+      - run: npm install
 
       - name: Pull Preview (staging) environment variables
         run: npx vercel env pull .env.preview --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --yes

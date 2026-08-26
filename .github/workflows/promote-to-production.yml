@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm ci
+      - run: npm install
 
       - name: Pull Production environment variables
         run: npx vercel env pull .env.production.local --environment=production --token=${{ secrets.VERCEL_TOKEN }} --yes
