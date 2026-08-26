@@ -1,0 +1,33 @@
+name: Migrate staging database
+
+# Vercel's own GitHub integration handles the actual build/deploy on every
+# push to master (our staging branch — see ADR-0001). This workflow just
+# keeps the staging (Neon "preview" branch) schema in sync with it.
+on:
+  push:
+    branches: [master]
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Pull Preview (staging) environment variables
+        run: npx vercel env pull .env.preview --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --yes
+
+      - name: Run migrations against the staging database
+        run: |
+          set -a
+          source .env.preview
+          set +a
+          npm run migrate:up
