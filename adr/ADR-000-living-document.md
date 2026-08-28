@@ -51,44 +51,42 @@ that lives — a running backlog and sketchpad, not a decision record.
   dummy `production` branch so `master` deploys as staging, migrations
   run via `node-pg-migrate` in two GitHub Actions workflows. Nothing
   outstanding here right now.
-- **Auth:** scaffolded, not wired up. `src/lib/auth.ts` has a NextAuth
-  config with an empty `providers: []` — no provider (Credentials,
-  GitHub, Google, etc.) has been chosen yet. `src/app/api/auth/[...nextauth]/route.ts`
-  exists and will pick up whatever gets added there.
+- **Auth:** wired up. A `users` table (username, `password_hash`,
+  `display_name` — two accounts only, no self-signup; real credentials
+  created via `npm run create-user` against a real `DATABASE_URL`,
+  never committed) backs two separate mechanisms: NextAuth's Credentials
+  provider (`src/lib/auth.ts`, session strategy `jwt`) for a future web
+  login, and a bearer-token login for the mobile app
+  (`src/lib/mobileAuth.ts` + `POST /api/mobile/login`, since a bare
+  React Native client doesn't suit NextAuth's cookie-based session).
+  Both share `src/lib/credentials.ts`'s `verifyCredentials()`.
+  `requireMobileAuth()` exists for other routes to adopt — the
+  `decks`/`recordings` routes below don't check it yet (see To-dos).
 - **Database access:** `src/lib/db.ts` has a pooled `pg` client wired to
-  `DATABASE_URL`, reused across hot reloads/invocations. Schema is
-  decided (ADR-002: `decks`/`decks_cards`/`decks_attempts`/
-  `word_recordings`, for on-the-go's Learning app) but not yet
-  implemented as a migration — see To-dos.
-- **API surface:** none yet. `src/app/page.tsx` is still the unmodified
-  `create-next-app` scaffold page. This is the main blocker for
-  `on-the-go` (and anything else) integrating against this repo.
+  `DATABASE_URL`, reused across hot reloads/invocations. ADR-002's
+  schema (`decks`/`decks_cards`/`decks_attempts`/`word_recordings`) is
+  implemented and pushed, alongside the `users` table above.
+- **API surface:** real routes now exist — `GET /api/decks/:deckId/cards`,
+  `POST /api/recordings`, `POST /api/recordings/batch`,
+  `POST /api/mobile/login`, plus NextAuth's route. None of the
+  decks/recordings routes are auth-gated yet (see To-dos). The remaining
+  blocker for `on-the-go` is that it doesn't call any of this yet —
+  it's still running on local dummy data.
 
 ## To-dos (backlog)
 
-- [ ] Decide on an auth model/provider for NextAuth and wire up
-      `src/lib/auth.ts` (currently `providers: []`).
-- [ ] **Rework the locally-committed schema migration** (currently a
-      `card_groups`/`cards` pair, no `decks_attempts` or
-      `word_recordings`, no `language_eng` rename) to match ADR-002, then
-      commit and push it so ADR-001's staging-deploy workflow actually
-      applies it to the staging db. Nothing's been pushed yet, so this is
-      a rewrite-in-place, not a follow-up migration.
-- [ ] Define and build the first real API route(s) so `on-the-go` (and
-      any other client) has something to point at — once ADR-002's
-      tables exist for real, this is the next real blocker for
-      `on-the-go`.
-- [ ] Build the write path for `word_recordings` (upload endpoint) —
-      ADR-002 designs the table (`bytea` storage, decided) and specifies
-      four requirements the route must enforce (lower-case the word
-      server-side, verify the audio actually decodes as AAC, reject
-      anything over 10s, upsert on `word` rather than reject/duplicate),
-      but the endpoint itself doesn't exist yet.
-- [ ] Build the two read-path endpoints ADR-002 settled on:
-      `GET /api/decks/:deckId/cards` (metadata only, no audio) and
-      `POST /api/recordings/batch` (audio for specific requested words).
-      Driven by on-the-go's local-cache design — see that repo's
-      `adr/ADR-001-word-recordings.md`.
+- [ ] Gate the `decks`/`recordings` routes behind `requireMobileAuth()`
+      (it exists, ready to adopt — see "Auth" above) — they're
+      unauthenticated right now, which was an explicit, acknowledged gap
+      in ADR-002 written *before* auth existed at all. Worth revisiting
+      now that it does.
+- [ ] Revisit `decks_attempts.actor` (ADR-002) now that a real `users`
+      table exists — it's currently nullable free text specifically
+      because no users table existed yet when that decision was made.
+      Not urgent, but the original reason for that shape is gone.
+- [ ] Wire on-the-go to actually call the API above instead of its local
+      dummy data (`data/flashcards.ts`) — schema, routes, and auth all
+      exist now; this is the real remaining blocker.
 - [ ] Replace the default `create-next-app` `page.tsx` with the actual
       dashboard/display this repo is meant to provide.
 
@@ -151,3 +149,19 @@ once it firms up._
   since the client's staleness check depends on `recorded_at` changing
   on re-record. See ADR-002 and on-the-go's
   `adr/ADR-001-word-recordings.md`.
+- 2026-08-28: Reworked the migration to match ADR-002 and built the
+  three routes it specifies (`GET /api/decks/:deckId/cards`,
+  `POST /api/recordings/batch`, `POST /api/recordings`), each verified
+  against a real Postgres — including a real bug caught and fixed
+  (`decks_attempts`'s bare `"bigserial"` shorthand didn't imply
+  `PRIMARY KEY`) and a real AAC file exercising the upload route's
+  validation. Pushing this hit a real divergence: `ed035c5` ("Add users
+  table + credential verification + mobile login") had landed on
+  `origin/master` from elsewhere in the meantime — real, wanted, working
+  auth (NextAuth Credentials + a mobile bearer-token login), not a
+  conflicting decision. Merged rather than overwritten: resolved a
+  `package.json`/`package-lock.json` conflict (both branches added a
+  dependency), then verified the combined result — both migrations
+  running together, a real `next build` succeeding with every route from
+  both branches listed — before pushing the merge. See To-dos for what
+  this unblocks and what it leaves open (route auth, `actor`'s shape).
