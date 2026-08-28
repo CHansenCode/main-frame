@@ -56,8 +56,10 @@ that lives — a running backlog and sketchpad, not a decision record.
   GitHub, Google, etc.) has been chosen yet. `src/app/api/auth/[...nextauth]/route.ts`
   exists and will pick up whatever gets added there.
 - **Database access:** `src/lib/db.ts` has a pooled `pg` client wired to
-  `DATABASE_URL`, reused across hot reloads/invocations. No schema
-  exists yet — `migrations/` is empty, no tables defined.
+  `DATABASE_URL`, reused across hot reloads/invocations. Schema is
+  decided (ADR-002: `decks`/`decks_cards`/`decks_attempts`/
+  `word_recordings`, for on-the-go's Learning app) but not yet
+  implemented as a migration — see To-dos.
 - **API surface:** none yet. `src/app/page.tsx` is still the unmodified
   `create-next-app` scaffold page. This is the main blocker for
   `on-the-go` (and anything else) integrating against this repo.
@@ -66,12 +68,26 @@ that lives — a running backlog and sketchpad, not a decision record.
 
 - [ ] Decide on an auth model/provider for NextAuth and wire up
       `src/lib/auth.ts` (currently `providers: []`).
-- [ ] Commit and push the new `card_groups`/`cards` migration (see Log)
-      so ADR-001's staging-deploy workflow actually applies it to the
-      staging db — written and verified locally, not yet on `master`.
+- [ ] **Rework the locally-committed schema migration** (currently a
+      `card_groups`/`cards` pair, no `decks_attempts` or
+      `word_recordings`, no `language_eng` rename) to match ADR-002, then
+      commit and push it so ADR-001's staging-deploy workflow actually
+      applies it to the staging db. Nothing's been pushed yet, so this is
+      a rewrite-in-place, not a follow-up migration.
 - [ ] Define and build the first real API route(s) so `on-the-go` (and
-      any other client) has something to point at — now that `cards`
-      has rows to serve, this is the next real blocker for `on-the-go`.
+      any other client) has something to point at — once ADR-002's
+      tables exist for real, this is the next real blocker for
+      `on-the-go`.
+- [ ] Build the write path for `word_recordings` (upload endpoint) —
+      ADR-002 designs the table (`bytea` storage, decided) and specifies
+      three requirements the route must enforce (lower-case the word
+      server-side, verify the audio actually decodes as AAC, reject
+      anything over 10s), but the endpoint itself doesn't exist yet.
+- [ ] Decide how cards are served with their recordings attached — a
+      `GET /api/recordings/:id` streaming endpoint vs. inlining each
+      recording as a base64 data URI in the card-list response. Flagged
+      as open in ADR-002; needs deciding as part of building the API
+      surface above.
 - [ ] Replace the default `create-next-app` `page.tsx` with the actual
       dashboard/display this repo is meant to provide.
 
@@ -93,11 +109,32 @@ once it firms up._
   `node-pg-migrate`, two GitHub Actions workflows. No outstanding
   reference kept here since the implementation is done; see ADR-001 for
   the full record.
-- 2026-08-28: Wrote the first schema migration:
+- 2026-08-28: Wrote a first-pass schema migration:
   `migrations/1787904305663_create-cards-table-and-seed-flashcards.js`,
   a `card_groups` / `cards` pair modeling on-the-go's `Card` type
   (`data/flashcards.ts`, branch `claude/android-app-chat-dev-6ce6lt`),
   seeded with that branch's 100 Swedish/Lithuanian dummy pairs. Verified
-  `up`/`down`/re-`up` against a disposable local Postgres container —
-  not yet committed or pushed, so ADR-001's staging-deploy workflow
-  hasn't applied it anywhere real yet (see To-dos).
+  `up`/`down`/re-`up` against a disposable local Postgres container, then
+  committed (not pushed).
+- 2026-08-28: Superseded the above same-day, before it was ever pushed —
+  ADR-002 accepted: renames the tables to `decks`/`decks_cards`/
+  `decks_attempts` (hierarchical naming), renames `decks_cards.name` to
+  `language_eng`, drops the `times_completed`/`last_completed` columns in
+  favor of a `decks_attempts` ledger (records direction and
+  correct/incorrect per review, including failures), and adds a fourth
+  `word_recordings` table for per-word audio, loosely joined by
+  lower-cased word text rather than a foreign key. See ADR-002 for the
+  full design and reasoning. The committed migration doesn't reflect this
+  yet — see To-dos.
+- 2026-08-28: Settled two open points in ADR-002, same day: dropped
+  `word_recordings.language` entirely (match by word text alone, no
+  canonical language-code column added to `decks` — accepted the small
+  cross-language-collision risk instead), and decided audio storage —
+  raw AAC bytes in a `word_recordings.audio_data bytea` column, not an
+  external URL. Checked real numbers before deciding the latter: Neon's
+  free tier is 0.5 GB shared across the `main`/`preview` branches (not
+  0.5 GB each), and a 20% share of that comfortably fits 2,000+
+  three-second AAC recordings — no CDN/object storage needed at this
+  scale. Added three concrete requirements for the (still unbuilt)
+  upload route: server-side lower-casing, verifying the audio actually
+  decodes as AAC, rejecting anything over 10 seconds.
