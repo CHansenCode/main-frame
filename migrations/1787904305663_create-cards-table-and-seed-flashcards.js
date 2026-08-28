@@ -1,20 +1,25 @@
 /**
- * First schema migration: a `card_groups` / `cards` pair modeling the
- * flashcard `Card` shape from on-the-go's `data/flashcards.ts` (branch
- * `claude/android-app-chat-dev-6ce6lt`), which today is dummy,
- * client-side-only data — nothing is persisted there yet.
+ * Learning app schema: `decks` / `decks_cards` / `decks_attempts` /
+ * `word_recordings`, per ADR-002 (`adr/ADR-002-learning-app-schema.md`).
  *
- * `card_groups` splits out `languageOneLabel` / `languageTwoLabel`, which
- * on-the-go currently defines once per module (not per card) — normalizing
- * them here avoids repeating the same two labels on every one of a
- * group's rows. `group` is a reserved word in Postgres, hence `card_groups`
- * / `group_id` rather than `group`.
+ * This reworks an earlier version of this same migration, which modeled
+ * a `card_groups` / `cards` pair (no attempts ledger, no recordings, no
+ * `language_eng` rename). That version predated ADR-002 and was never
+ * pushed, so it's rewritten in place here rather than superseded by a
+ * follow-up migration — see ADR-002's Consequences section.
  *
- * The seed data below is copied verbatim from that branch's `pairs` array
- * (100 English-gloss -> [Swedish, Lithuanian] triples) so on-the-go has
- * real rows to point at instead of its bundled dummy list. This is
- * throwaway/dev seed data, not a real user's data — worth reconsidering
- * before any real user-generated cards exist.
+ * `decks`/`decks_cards`/`decks_attempts` share the `decks_` prefix to make
+ * the family relationship visible in the table name itself. `word_recordings`
+ * deliberately does not take that prefix — it isn't scoped to a deck; see
+ * ADR-002's "loosely coupled by word text" section.
+ *
+ * The seed data below is copied verbatim from on-the-go's `data/flashcards.ts`
+ * `pairs` array (100 English-gloss -> [Swedish, Lithuanian] triples), same as
+ * the original version of this migration — only the destination column names
+ * changed (`name` -> `language_eng`). This is throwaway/dev seed data, not a
+ * real user's data — worth reconsidering before any real user-generated cards
+ * exist. Only `decks` and `decks_cards` are seeded; `decks_attempts` and
+ * `word_recordings` start empty.
  *
  * @type {import('node-pg-migrate').ColumnDefinitions | undefined}
  */
@@ -127,7 +132,7 @@ const pairs = [
   ["name", "namn", "vardas"],
 ];
 
-const GROUP_NAME = "Swedish ↔ Lithuanian";
+const DECK_NAME = "Swedish ↔ Lithuanian";
 const LANGUAGE_ONE_LABEL = "Swedish";
 const LANGUAGE_TWO_LABEL = "Lithuanian";
 
@@ -148,7 +153,7 @@ const escape = (s) => `'${s.replace(/'/g, "''")}'`;
  * @returns {void}
  */
 export const up = (pgm) => {
-  pgm.createTable("card_groups", {
+  pgm.createTable("decks", {
     id: "id",
     name: { type: "text", notNull: true, unique: true },
     language_one_label: { type: "text", notNull: true },
@@ -160,19 +165,17 @@ export const up = (pgm) => {
     },
   });
 
-  pgm.createTable("cards", {
+  pgm.createTable("decks_cards", {
     id: "id",
-    group_id: {
+    deck_id: {
       type: "integer",
       notNull: true,
-      references: "card_groups",
+      references: "decks",
       onDelete: "CASCADE",
     },
-    name: { type: "text", notNull: true },
+    language_eng: { type: "text", notNull: true },
     language_one: { type: "text", notNull: true },
     language_two: { type: "text", notNull: true },
-    times_completed: { type: "integer", notNull: true, default: 0 },
-    last_completed: { type: "timestamptz" },
     created_at: {
       type: "timestamptz",
       notNull: true,
@@ -180,22 +183,65 @@ export const up = (pgm) => {
     },
   });
 
-  pgm.createIndex("cards", "group_id");
+  pgm.createIndex("decks_cards", "deck_id");
+
+  pgm.createTable("decks_attempts", {
+    id: { type: "bigserial", primaryKey: true },
+    card_id: {
+      type: "integer",
+      notNull: true,
+      references: "decks_cards",
+      onDelete: "CASCADE",
+    },
+    direction: {
+      type: "text",
+      notNull: true,
+      check: "\"direction\" IN ('one_to_two', 'two_to_one')",
+    },
+    is_correct: { type: "boolean", notNull: true },
+    actor: { type: "text" },
+    completed_at: {
+      type: "timestamptz",
+      notNull: true,
+      default: pgm.func("now()"),
+    },
+  });
+
+  pgm.createIndex("decks_attempts", "card_id");
+  pgm.createIndex("decks_attempts", "completed_at");
+
+  pgm.createTable("word_recordings", {
+    id: "id",
+    word: { type: "text", notNull: true, unique: true },
+    audio_data: { type: "bytea", notNull: true },
+    recorded_by: { type: "text" },
+    recorded_at: {
+      type: "timestamptz",
+      notNull: true,
+      default: pgm.func("now()"),
+    },
+  });
 
   pgm.sql(`
-    INSERT INTO card_groups (name, language_one_label, language_two_label)
-    VALUES (${escape(GROUP_NAME)}, ${escape(LANGUAGE_ONE_LABEL)}, ${escape(LANGUAGE_TWO_LABEL)});
+    ALTER TABLE word_recordings
+    ADD CONSTRAINT word_recordings_word_lowercase_check
+    CHECK ("word" = lower("word"));
+  `);
+
+  pgm.sql(`
+    INSERT INTO decks (name, language_one_label, language_two_label)
+    VALUES (${escape(DECK_NAME)}, ${escape(LANGUAGE_ONE_LABEL)}, ${escape(LANGUAGE_TWO_LABEL)});
   `);
 
   const rows = pairs
     .map(
-      ([name, languageOne, languageTwo]) =>
-        `((SELECT id FROM card_groups WHERE name = ${escape(GROUP_NAME)}), ${escape(name)}, ${escape(languageOne)}, ${escape(languageTwo)})`,
+      ([languageEng, languageOne, languageTwo]) =>
+        `((SELECT id FROM decks WHERE name = ${escape(DECK_NAME)}), ${escape(languageEng)}, ${escape(languageOne)}, ${escape(languageTwo)})`,
     )
     .join(",\n       ");
 
   pgm.sql(`
-    INSERT INTO cards (group_id, name, language_one, language_two)
+    INSERT INTO decks_cards (deck_id, language_eng, language_one, language_two)
     VALUES ${rows};
   `);
 };
@@ -205,6 +251,8 @@ export const up = (pgm) => {
  * @returns {void}
  */
 export const down = (pgm) => {
-  pgm.dropTable("cards");
-  pgm.dropTable("card_groups");
+  pgm.dropTable("word_recordings");
+  pgm.dropTable("decks_attempts");
+  pgm.dropTable("decks_cards");
+  pgm.dropTable("decks");
 };
