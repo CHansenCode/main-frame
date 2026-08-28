@@ -80,14 +80,15 @@ that lives — a running backlog and sketchpad, not a decision record.
       `on-the-go`.
 - [ ] Build the write path for `word_recordings` (upload endpoint) —
       ADR-002 designs the table (`bytea` storage, decided) and specifies
-      three requirements the route must enforce (lower-case the word
+      four requirements the route must enforce (lower-case the word
       server-side, verify the audio actually decodes as AAC, reject
-      anything over 10s), but the endpoint itself doesn't exist yet.
-- [ ] Decide how cards are served with their recordings attached — a
-      `GET /api/recordings/:id` streaming endpoint vs. inlining each
-      recording as a base64 data URI in the card-list response. Flagged
-      as open in ADR-002; needs deciding as part of building the API
-      surface above.
+      anything over 10s, upsert on `word` rather than reject/duplicate),
+      but the endpoint itself doesn't exist yet.
+- [ ] Build the two read-path endpoints ADR-002 settled on:
+      `GET /api/decks/:deckId/cards` (metadata only, no audio) and
+      `POST /api/recordings/batch` (audio for specific requested words).
+      Driven by on-the-go's local-cache design — see that repo's
+      `adr/ADR-001-word-recordings.md`.
 - [ ] Replace the default `create-next-app` `page.tsx` with the actual
       dashboard/display this repo is meant to provide.
 
@@ -138,3 +139,15 @@ once it firms up._
   scale. Added three concrete requirements for the (still unbuilt)
   upload route: server-side lower-casing, verifying the audio actually
   decodes as AAC, rejecting anything over 10 seconds.
+- 2026-08-28: Resolved ADR-002's read-path question from the client
+  side in: on-the-go decided to cache recordings to local device storage
+  (mirroring its Poems tab's existing `expo-file-system` approach) and
+  play back from disk, not the network. That replaced the earlier
+  streaming-vs-inline-data-URI framing entirely with two endpoints — a
+  metadata-only card list the client diffs locally against, and a batch
+  endpoint returning audio for just the specific words it's missing or
+  has stale copies of. Also settled: re-recording a word upserts
+  (`ON CONFLICT (word) DO UPDATE`) rather than rejecting or duplicating,
+  since the client's staleness check depends on `recorded_at` changing
+  on re-record. See ADR-002 and on-the-go's
+  `adr/ADR-001-word-recordings.md`.

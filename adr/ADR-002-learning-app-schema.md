@@ -199,22 +199,63 @@ That's an order of magnitude more than the 100-word deck that exists
 today, so `word_recordings.audio_data bytea` storing raw bytes directly
 is accepted as fine for now rather than provisional.
 
-One open consequence of this choice: the `LEFT JOIN` above no longer
-hands back a plug-and-playable URL the way the original `audio_url`
-design did — on-the-go's audio player needs a URI to point at, not a
-raw byte blob sitting inside a JSON response. Two ways to bridge that,
-neither picked yet: a dedicated `GET /api/recordings/:id` route that
-streams the bytes back with `Content-Type: audio/mp4` (lets HTTP caching
-do some work, keeps card-list payloads small), or inlining each
-recording as a base64 data URI directly in the card-list response (one
-request instead of two, and base64's ~33% overhead is irrelevant at
-these sizes). Left to the future API-build to-do — flagging it now so
-it's a deliberate pick then, not a surprise.
+### Read path: two endpoints, driven by on-the-go's local-first cache
+
+The `LEFT JOIN` above no longer hands back a plug-and-playable URL the
+way the original `audio_url` design did, and the read path settled on is
+shaped by a decision made on the client side, not the server: on-the-go
+caches recordings to local device storage (via `expo-file-system`, the
+same approach the app's Poems tab already uses) and plays back from
+disk, not from the network, on every review. That means the server isn't
+serving audio inline with each card fetch at all — it needs to answer
+two different questions instead:
+
+1. **`GET /api/decks/:deckId/cards?wordCount=N`** — cards plus recording
+   *metadata* only, no audio bytes:
+   ```json
+   [{
+     "id": 1, "languageEng": "hello", "languageOne": "hej", "languageTwo": "labas",
+     "languageOneRecording": { "recordedAt": "2026-08-28T10:00:00Z" },
+     "languageTwoRecording": null
+   }]
+   ```
+   Cheap and small regardless of how many words have recordings — this
+   is what renders the deck immediately and lets the client diff against
+   what it already has cached locally (by comparing `recordedAt` to its
+   local copy's).
+2. **`POST /api/recordings/batch`**, body `{ "words": ["hej", ...] }` —
+   returns actual audio for just the words the client determines it's
+   missing or has a stale copy of (`recordedAt` newer remotely than
+   locally), as a JSON array of `{ word, recordedAt, audioBase64 }`. One
+   batched request rather than one per word, since a cold cache (first
+   run, or a new deck) may need dozens at once and each mobile round trip
+   isn't free. Base64-in-JSON rather than multipart: at ~25–50 KB per
+   clip and a few dozen at a time, the ~33% overhead is trivial next to
+   the cost of a fussier response format.
+
+This supersedes the earlier "streaming endpoint vs. inline data URI"
+framing entirely — both of those assumed the server hands over audio on
+every card fetch. Once the client is caching locally and only asking for
+what changed, that assumption doesn't hold, and the two endpoints above
+are both simpler and better suited to a mobile network than either
+original option. See on-the-go's `adr/ADR-001-word-recordings.md` for
+the client-side half of this (local storage layout, the staleness check,
+playback from disk).
+
+Also settled here, because the caching scheme depends on it: **re-recording
+a word upserts its existing row rather than inserting a new one or
+rejecting the write.** `word_recordings.word` is `UNIQUE`, so a second
+recording for the same word has to be `INSERT ... ON CONFLICT (word) DO
+UPDATE`, replacing `audio_data`/`recorded_by` and bumping `recorded_at`.
+That's not just convenient — it's what makes the client's staleness
+check work at all: a re-record is only visible to already-cached clients
+because it changes `recorded_at`, which is the only signal endpoint 1
+gives them to invalidate a local copy.
 
 ### Requirements this places on the write path (API route, not yet built)
 
 Whatever endpoint eventually accepts a new recording (from on-the-go's
-"record this" button) carries three obligations, each guarding something
+"record this" button) carries four obligations, each guarding something
 the schema alone can't enforce on its own:
 
 1. **Lower-case the word server-side before matching or inserting.** The
@@ -237,6 +278,13 @@ the schema alone can't enforce on its own:
    what actually protects the storage budget calculated above; the two
    layers should agree on the same number so the client's warning and
    the server's rejection never disagree.
+4. **Upsert on `word`, don't reject or duplicate.** A second recording
+   for a word already in `word_recordings` must replace the existing row
+   (`INSERT ... ON CONFLICT (word) DO UPDATE`), not fail on the `UNIQUE`
+   constraint or insert a second row — both `word_recordings.word`'s
+   uniqueness and the client's caching scheme above depend on there
+   being exactly one current row per word, with `recorded_at` reflecting
+   the latest write.
 
 None of this write path exists yet — this section records what it will
 be required to do, not an implementation.
