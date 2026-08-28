@@ -45,7 +45,7 @@ export async function GET(
 
   type CardRow = {
     id: number;
-    languageEng: string;
+    languageEng: string | null;
     languageOne: string;
     languageTwo: string;
     languageOneRecordedAt: Date | null;

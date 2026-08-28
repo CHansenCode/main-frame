@@ -65,13 +65,19 @@ that lives — a running backlog and sketchpad, not a decision record.
 - **Database access:** `src/lib/db.ts` has a pooled `pg` client wired to
   `DATABASE_URL`, reused across hot reloads/invocations. ADR-002's
   schema (`decks`/`decks_cards`/`decks_attempts`/`word_recordings`) is
-  implemented and pushed, alongside the `users` table above.
-- **API surface:** real routes now exist — `GET /api/decks/:deckId/cards`,
+  implemented and pushed, alongside the `users` table above. Two decks
+  now seeded: a 100-word Swedish/Lithuanian placeholder (the first
+  migration's dummy content), and the real 237-word *Žuikis Puikus*
+  vocabulary (see Log) — `language_eng` is nullable and `decks_cards`
+  has a `page_nr` column to accommodate the latter, which has no English
+  gloss.
+- **API surface:** real routes exist — `GET /api/decks/:deckId/cards`,
   `POST /api/recordings`, `POST /api/recordings/batch`,
   `POST /api/mobile/login`, plus NextAuth's route. None of the
-  decks/recordings routes are auth-gated yet (see To-dos). The remaining
-  blocker for `on-the-go` is that it doesn't call any of this yet —
-  it's still running on local dummy data.
+  decks/recordings routes are auth-gated yet (see To-dos). `on-the-go`
+  now calls this API instead of local dummy data — but see the new
+  Vercel deployment-protection to-do below before assuming a phone can
+  actually reach it.
 
 ## To-dos (backlog)
 
@@ -84,11 +90,23 @@ that lives — a running backlog and sketchpad, not a decision record.
       table exists — it's currently nullable free text specifically
       because no users table existed yet when that decision was made.
       Not urgent, but the original reason for that shape is gone.
-- [ ] Wire on-the-go to actually call the API above instead of its local
-      dummy data (`data/flashcards.ts`) — schema, routes, and auth all
-      exist now; this is the real remaining blocker.
 - [ ] Replace the default `create-next-app` `page.tsx` with the actual
       dashboard/display this repo is meant to provide.
+- [ ] **Decide how on-the-go is actually supposed to reach this API.**
+      Discovered while trying to get today's work onto a phone: this
+      project's `ssoProtection` is `all_except_custom_domains` — every
+      `*.vercel.app` URL (staging *and* what would be production) is
+      behind Vercel's own SSO wall, since there's no custom domain
+      attached yet. That means a mobile app's plain `fetch()` can't
+      reach any of this at all right now, regardless of how staging vs.
+      production is wired. Real options, not yet decided: a Protection
+      Bypass for Automation secret sent as a header (keeps the wall up
+      for everyone else); turning `ssoProtection` off entirely (makes
+      every deployment public — meaningful exposure given the routes
+      below aren't auth-gated yet either); or attaching a real custom
+      domain (bypasses the wall automatically per this same setting, but
+      needs a domain to point at it). This blocks the mobile app
+      regardless of which environment it's pointed at.
 
 ## Sketches / ideas in progress
 
@@ -165,3 +183,26 @@ once it firms up._
   running together, a real `next build` succeeding with every route from
   both branches listed — before pushing the merge. See To-dos for what
   this unblocks and what it leaves open (route auth, `actor`'s shape).
+- 2026-08-28: Corrected a wrong assumption from the very first migration.
+  "The zuikus puikus data" was assumed to mean the generic 100-word
+  Swedish/Lithuanian placeholder deck already sitting in on-the-go's
+  dummy data — it didn't. A real, page-by-page vocabulary extraction
+  from the actual Lithuanian children's book *Žuikis Puikus* (title
+  character's name — "zuikis" = hare, "puikus" = fine, both of which
+  appear in the word list itself) was sitting the whole time on a
+  completely orphaned on-the-go branch, `zuikus-puikus`, which had never
+  been fetched locally. On-the-go's own ADR-000 (ported over during the
+  branch reconciliation, see its Log) already had an explicit to-do to
+  wire this in "once main-frame has a real database" — this migration is
+  that to-do, done: `1787938199260_add-page-nr-and-seed-zuikis-puikus-deck.js`
+  adds the 237 real words as a second deck (kept alongside the
+  placeholder rather than replacing it, since that's already live), and
+  the two schema changes it needed (`language_eng` nullable, new
+  `page_nr` column) — verified `up`/`down`/`up` and a real query for both
+  decks' row counts before pushing.
+- 2026-08-28: Trying to actually verify a phone could reach any of this
+  surfaced a separate, unrelated blocker: this project's
+  `ssoProtection` is `all_except_custom_domains` (confirmed via
+  `vercel api`, not guessed) — every deployment URL, staging or
+  production, redirects to Vercel's own SSO login for anyone outside the
+  team account. Not yet decided how to resolve it — see To-dos.
