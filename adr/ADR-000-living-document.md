@@ -92,21 +92,26 @@ that lives — a running backlog and sketchpad, not a decision record.
       Not urgent, but the original reason for that shape is gone.
 - [ ] Replace the default `create-next-app` `page.tsx` with the actual
       dashboard/display this repo is meant to provide.
-- [ ] **Decide how on-the-go is actually supposed to reach this API.**
-      Discovered while trying to get today's work onto a phone: this
-      project's `ssoProtection` is `all_except_custom_domains` — every
-      `*.vercel.app` URL (staging *and* what would be production) is
-      behind Vercel's own SSO wall, since there's no custom domain
-      attached yet. That means a mobile app's plain `fetch()` can't
-      reach any of this at all right now, regardless of how staging vs.
-      production is wired. Real options, not yet decided: a Protection
-      Bypass for Automation secret sent as a header (keeps the wall up
-      for everyone else); turning `ssoProtection` off entirely (makes
-      every deployment public — meaningful exposure given the routes
-      below aren't auth-gated yet either); or attaching a real custom
-      domain (bypasses the wall automatically per this same setting, but
-      needs a domain to point at it). This blocks the mobile app
-      regardless of which environment it's pointed at.
+- [x] ~~Decide how on-the-go is actually supposed to reach this API~~ —
+      decided: a Protection Bypass for Automation secret, sent as
+      `x-vercel-protection-bypass`, rather than disabling `ssoProtection`
+      project-wide or waiting on a custom domain. on-the-go sends it via
+      `EXPO_PUBLIC_VERCEL_BYPASS_SECRET` (see its `lib/learningApi.ts`).
+      Worth knowing: that value is now visible in this project's own
+      session history and baked into a published on-the-go update, so
+      it's not meaningfully secret anymore — regenerate it from Vercel's
+      project settings if that's a problem; nothing app-level depends on
+      the specific value.
+- [ ] **on-the-go's Server URL still isn't actually set to anything.**
+      `readSettings().serverUrl ?? ''` has no default or hardcoded
+      fallback anywhere — whether the app can reach main-frame at all
+      depends entirely on a string manually typed into Settings on the
+      physical phone, which nothing in this repo's work today touched.
+      Production's stable URL (confirmed live, not a per-deployment one
+      that changes every push): `https://main-frame-chansencodes-projects.vercel.app`.
+- [x] ~~Load staging's data onto production, promote staging to
+      production~~ — done 2026-08-28, see Log. Production now has both
+      decks; the `promote-to-production.yml` workflow ran clean.
 
 ## Sketches / ideas in progress
 
@@ -206,3 +211,16 @@ once it firms up._
   `vercel api`, not guessed) — every deployment URL, staging or
   production, redirects to Vercel's own SSO login for anyone outside the
   team account. Not yet decided how to resolve it — see To-dos.
+- 2026-08-28: Resolved the SSO-wall blocker above: generated a
+  Protection Bypass for Automation secret (via `vercel curl`, which
+  auto-provisions one) and wired it into on-the-go instead of disabling
+  protection project-wide. Then promoted to production for the first
+  time: ran `promote-to-production.yml` against
+  `main-frame-5a3rj2a0w-chansencodes-projects.vercel.app` (the verified
+  staging build including today's Žuikis Puikus migration) — production
+  database migrated clean, `vercel promote` succeeded, and a live query
+  against `https://main-frame-chansencodes-projects.vercel.app`
+  confirmed both decks' real data on production afterward, not just a
+  green workflow run. Surfaced in the process: on-the-go's Server URL
+  has never actually been set to anything (see To-dos) — none of this is
+  reachable from the phone yet regardless of environment.
