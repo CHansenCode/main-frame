@@ -102,13 +102,10 @@ that lives — a running backlog and sketchpad, not a decision record.
       it's not meaningfully secret anymore — regenerate it from Vercel's
       project settings if that's a problem; nothing app-level depends on
       the specific value.
-- [ ] **on-the-go's Server URL still isn't actually set to anything.**
-      `readSettings().serverUrl ?? ''` has no default or hardcoded
-      fallback anywhere — whether the app can reach main-frame at all
-      depends entirely on a string manually typed into Settings on the
-      physical phone, which nothing in this repo's work today touched.
-      Production's stable URL (confirmed live, not a per-deployment one
-      that changes every push): `https://main-frame-chansencodes-projects.vercel.app`.
+- [x] ~~on-the-go's Server URL isn't actually set to anything~~ — fixed
+      on that side: `lib/settings.ts`'s `DEFAULT_SERVER_URL` now defaults
+      to production automatically, still overridable from Settings. See
+      on-the-go's own ADR-000 Log.
 - [x] ~~Load staging's data onto production, promote staging to
       production~~ — done 2026-08-28, see Log. Production now has both
       decks; the `promote-to-production.yml` workflow ran clean.
