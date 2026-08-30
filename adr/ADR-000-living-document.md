@@ -221,3 +221,9 @@ once it firms up._
   green workflow run. Surfaced in the process: on-the-go's Server URL
   has never actually been set to anything (see To-dos) — none of this is
   reachable from the phone yet regardless of environment.
+- 2026-08-30: Finished the ADR renumbering cleanup from 2026-08-27
+  (leftover uncommitted): fixed remaining ADR-0001 references in the two
+  GitHub Actions workflow comments and in ADR-001's own title, and added
+  `adr/README.md` explaining the ADR-000-vs-numbered-ADR split. Also
+  pointed `AGENTS.md` at ADR-000 so a session reads it automatically.
+  Docs/comments only, no functional change.
