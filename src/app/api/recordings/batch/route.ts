@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { pool } from "@/lib/db";
+import { requireMobileAuth } from "@/lib/mobileAuth";
 
 // POST /api/recordings/batch
 // Body: { "words": string[] }
@@ -8,6 +9,11 @@ import { pool } from "@/lib/db";
 // words actually have a word_recordings row (case-insensitive match).
 // Words with no recording are silently omitted, not errored on.
 export async function POST(request: NextRequest) {
+  const auth = await requireMobileAuth(request);
+  if (!auth) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

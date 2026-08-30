@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude Code worktrees (EnterWorktree nests these under the repo itself)
+/.claude/worktrees/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

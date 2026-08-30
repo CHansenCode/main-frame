@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { pool } from "@/lib/db";
+import { requireMobileAuth } from "@/lib/mobileAuth";
 
 // GET /api/decks/:deckId/cards?wordCount=N
 //
@@ -10,6 +11,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ deckId: string }> }
 ) {
+  const auth = await requireMobileAuth(request);
+  if (!auth) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { deckId: deckIdRaw } = await params;
   const deckId = Number(deckIdRaw);
 

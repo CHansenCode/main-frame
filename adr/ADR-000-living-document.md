@@ -60,8 +60,9 @@ that lives — a running backlog and sketchpad, not a decision record.
   (`src/lib/mobileAuth.ts` + `POST /api/mobile/login`, since a bare
   React Native client doesn't suit NextAuth's cookie-based session).
   Both share `src/lib/credentials.ts`'s `verifyCredentials()`.
-  `requireMobileAuth()` exists for other routes to adopt — the
-  `decks`/`recordings` routes below don't check it yet (see To-dos).
+  `requireMobileAuth()` now gates the `decks`/`recordings` routes below
+  too (see Log) — on-the-go must send its bearer token on those calls
+  or they'll 401.
 - **Database access:** `src/lib/db.ts` has a pooled `pg` client wired to
   `DATABASE_URL`, reused across hot reloads/invocations. ADR-002's
   schema (`decks`/`decks_cards`/`decks_attempts`/`word_recordings`) is
@@ -73,19 +74,19 @@ that lives — a running backlog and sketchpad, not a decision record.
   gloss.
 - **API surface:** real routes exist — `GET /api/decks/:deckId/cards`,
   `POST /api/recordings`, `POST /api/recordings/batch`,
-  `POST /api/mobile/login`, plus NextAuth's route. None of the
-  decks/recordings routes are auth-gated yet (see To-dos). `on-the-go`
+  `POST /api/mobile/login`, plus NextAuth's route. The three
+  decks/recordings routes are now auth-gated (see Log). `on-the-go`
   now calls this API instead of local dummy data — but see the new
   Vercel deployment-protection to-do below before assuming a phone can
   actually reach it.
 
 ## To-dos (backlog)
 
-- [ ] Gate the `decks`/`recordings` routes behind `requireMobileAuth()`
-      (it exists, ready to adopt — see "Auth" above) — they're
-      unauthenticated right now, which was an explicit, acknowledged gap
-      in ADR-002 written *before* auth existed at all. Worth revisiting
-      now that it does.
+- [x] ~~Gate the `decks`/`recordings` routes behind
+      `requireMobileAuth()`~~ — done 2026-08-30, see Log. **Coupled
+      change: on-the-go must send `Authorization: Bearer <token>` on
+      these calls now or they 401** — fixed there in the same session,
+      see its own ADR-000 Log.
 - [ ] Revisit `decks_attempts.actor` (ADR-002) now that a real `users`
       table exists — it's currently nullable free text specifically
       because no users table existed yet when that decision was made.
@@ -227,3 +228,13 @@ once it firms up._
   `adr/README.md` explaining the ADR-000-vs-numbered-ADR split. Also
   pointed `AGENTS.md` at ADR-000 so a session reads it automatically.
   Docs/comments only, no functional change.
+- 2026-08-30: Gated `GET /api/decks/:deckId/cards`, `POST /api/recordings`,
+  and `POST /api/recordings/batch` behind `requireMobileAuth()` (it
+  already existed, unused until now) — each returns 401 without a valid
+  bearer token. Verified via `eslint` on the changed files (full
+  `next build`/`tsc` wasn't run standalone here due to a pre-existing,
+  unrelated `LayoutProps` codegen error that only resolves after a real
+  `next build`/`dev` run generates `.next/types`). This is a breaking
+  change for any client already calling these routes unauthenticated —
+  on-the-go was the only one, fixed in the same session (see its
+  ADR-000 Log) before this went out, so the two ship together.
