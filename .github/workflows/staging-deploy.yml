@@ -1,7 +1,7 @@
 name: Migrate staging database
 
 # Vercel's own GitHub integration handles the actual build/deploy on every
-# push to master (our staging branch — see ADR-0001). This workflow just
+# push to master (our staging branch — see ADR-001). This workflow just
 # keeps the staging (Neon "preview" branch) schema in sync with it.
 on:
   push:
