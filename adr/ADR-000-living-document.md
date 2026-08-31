@@ -81,6 +81,13 @@ that lives — a running backlog and sketchpad, not a decision record.
 
 ## To-dos (backlog)
 
+- [ ] Implement ADR-003 (CV creation): `cvs`/`cv_experience`/
+      `cv_experience_bullets`/`cv_education`/`cv_skills`/`cv_links`/
+      `cv_projects`/`cv_project_bullets` migration, the nested-read +
+      granular-CRUD API under `/api/cvs`, the `/cvs` list and
+      `/cvs/[id]` editor pages (first real content behind the web
+      NextAuth login), and the `@react-pdf/renderer`-based
+      `GET /api/cvs/:id/pdf` exporter. Decided, nothing built yet.
 - [ ] Gate the `decks`/`recordings` routes behind `requireMobileAuth()`
       (it exists, ready to adopt — see "Auth" above) — they're
       unauthenticated right now, which was an explicit, acknowledged gap
@@ -119,6 +126,15 @@ once it firms up._
 
 ## Log
 
+- 2026-08-30: ADR-003 accepted (CV creation page + db storage): `cvs`
+  plus typed child tables per section (experience/education/skills/
+  links/projects, with separate bullet tables for ordered sub-lists),
+  a nested-read/granular-write CRUD API under `/api/cvs`, an editor
+  page under main-frame's own dashboard, and `@react-pdf/renderer`-based
+  PDF export rendered on demand (no stored PDF bytes). `cvs.owner_id` is
+  a real FK to `users` from the start, unlike ADR-002's provisional
+  `actor` — see ADR-003's Consequences for applying that precedent back
+  to `decks_attempts.actor`. See To-dos for implementation status.
 - 2026-08-27: File created; `adr/` folder introduced (previously
   ADR-0001 lived loose at the repo root as
   `ADR-0001-staging-production-pipeline.md`). Moved into `adr/` and
