@@ -2,7 +2,7 @@ name: Promote to production
 
 # Manual gate: migrate the production database, then flip production
 # traffic to an already-built staging deployment without rebuilding.
-# See ADR-0001 for the reasoning.
+# See ADR-001 for the reasoning.
 on:
   workflow_dispatch:
     inputs:

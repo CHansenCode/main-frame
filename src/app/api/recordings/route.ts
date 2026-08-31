@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { parseBuffer } from "music-metadata";
 import { pool } from "@/lib/db";
+import { requireMobileAuth } from "@/lib/mobileAuth";
 
 const MAX_DURATION_SECONDS = 10;
 
@@ -14,6 +15,11 @@ const MAX_DURATION_SECONDS = 10;
 // (d) upserts into word_recordings on the `word` unique constraint, so a
 //     second recording for an existing word replaces it.
 export async function POST(request: NextRequest) {
+  const auth = await requireMobileAuth(request);
+  if (!auth) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

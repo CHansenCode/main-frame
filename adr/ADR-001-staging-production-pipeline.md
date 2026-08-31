@@ -1,4 +1,4 @@
-# ADR-0001: Staging/production environments, database branching, and migrations
+# ADR-001: Staging/production environments, database branching, and migrations
 
 ## Status
 
